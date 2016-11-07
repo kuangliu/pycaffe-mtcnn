@@ -20,7 +20,7 @@ python main.py ./test/1.jpg 0
 
 
 It takes:
-```Python
+```
 ./test/1.jpg  49ms  
 ./test/2.jpg  99ms  
 ./test/3.jpg  140ms  
