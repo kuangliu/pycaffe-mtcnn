@@ -1,4 +1,4 @@
-# MTCNN with Caffe in Python.
+# MTCNN with Caffe in Python
 
 ## Usage
 ```Python

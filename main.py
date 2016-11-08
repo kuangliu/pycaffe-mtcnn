@@ -40,16 +40,16 @@ def draw_and_show(im, bboxes, points=None):
                 x = int(p[i])
                 y = int(p[i+5])
                 # Again, swap x and y.
-                cv2.circle(im, (y, x), 1, (0, 0, 255), 2)
+                cv2.circle(im, (y,x), 1, (0,0,255), 2)
 
     cv2.imshow('result', im)
     cv2.waitKey(0)
 
-def non_max_suppression(dets, threshold=0.5, mode='union'):
+def non_max_suppression(bboxes, threshold=0.5, mode='union'):
     '''Non max suppression.
 
     Args:
-      dets: (tensor) bounding boxes and scores sized [N, 5].
+      bboxes: (tensor) bounding boxes and scores sized [N, 5].
       threshold: (float) overlap threshold.
       mode: (str) 'union' or 'min'.
 
@@ -60,11 +60,11 @@ def non_max_suppression(dets, threshold=0.5, mode='union'):
     Ref:
       https://github.com/rbgirshick/py-faster-rcnn/blob/master/lib/nms/py_cpu_nms.py
     '''
-    x1 = dets[:,0]
-    y1 = dets[:,1]
-    x2 = dets[:,2]
-    y2 = dets[:,3]
-    scores = dets[:, 4]
+    x1 = bboxes[:,0]
+    y1 = bboxes[:,1]
+    x2 = bboxes[:,2]
+    y2 = bboxes[:,3]
+    scores = bboxes[:, 4]
 
     areas = (x2 - x1 + 1) * (y2 - y1 + 1)
     order = scores.argsort()[::-1]
@@ -92,62 +92,62 @@ def non_max_suppression(dets, threshold=0.5, mode='union'):
         inds = np.where(ovr <= threshold)[0]
         order = order[inds + 1]
 
-    return dets[keep], keep
+    return bboxes[keep], keep
 
-def padding(bbox, im_height, im_width):
+def padding(bboxes, im_height, im_width):
     '''Padding bouding boxes the edge of image, if it's too large.'''
-    bbox[:,0] = np.maximum(0, bbox[:,0])
-    bbox[:,1] = np.maximum(0, bbox[:,1])
-    bbox[:,2] = np.minimum(im_width-1, bbox[:,2])
-    bbox[:,3] = np.minimum(im_height-1, bbox[:,3])
-    return bbox
+    bboxes[:,0] = np.maximum(0, bboxes[:,0])
+    bboxes[:,1] = np.maximum(0, bboxes[:,1])
+    bboxes[:,2] = np.minimum(im_width-1, bboxes[:,2])
+    bboxes[:,3] = np.minimum(im_height-1, bboxes[:,3])
+    return bboxes
 
-def bbox_to_square(bbox):
+def bbox_to_square(bboxes):
     '''Make bounding boxes square.'''
-    square_bbox = bbox.copy()
+    square_bbox = bboxes.copy()
 
-    w = bbox[:,2] - bbox[:,0] + 1
-    h = bbox[:,3] - bbox[:,1] + 1
+    w = bboxes[:,2] - bboxes[:,0] + 1
+    h = bboxes[:,3] - bboxes[:,1] + 1
     max_side = np.maximum(h,w)
 
-    square_bbox[:,0] = bbox[:,0] + (w - max_side) * 0.5
-    square_bbox[:,1] = bbox[:,1] + (h - max_side) * 0.5
+    square_bbox[:,0] = bboxes[:,0] + (w - max_side) * 0.5
+    square_bbox[:,1] = bboxes[:,1] + (h - max_side) * 0.5
     square_bbox[:,2] = square_bbox[:,0] + max_side - 1
     square_bbox[:,3] = square_bbox[:,1] + max_side - 1
 
     return square_bbox
 
-def bbox_regression(bbox):
+def bbox_regression(bboxes):
     '''Bounding box regression.
 
     Args:
-      bbox: (tensor) bouding boxes sized [N,9], containing:
+      bboxes: (tensor) bounding boxes sized [N,9], containing:
         x1, y1, x2, y2, score, regy1, regx1, regy2, regx2.
 
     Return:
       Regressed bounding boxes sized [N,5].
     '''
-    bbw = bbox[:,2] - bbox[:,0] + 1
-    bbh = bbox[:,3] - bbox[:,1] + 1
+    bbw = bboxes[:,2] - bboxes[:,0] + 1
+    bbh = bboxes[:,3] - bboxes[:,1] + 1
 
-    x1 = bbox[:,0]
-    y1 = bbox[:,1]
-    x2 = bbox[:,2]
-    y2 = bbox[:,3]
+    x1 = bboxes[:,0]
+    y1 = bboxes[:,1]
+    x2 = bboxes[:,2]
+    y2 = bboxes[:,3]
 
-    score = bbox[:,4]
+    scores = bboxes[:,4]
 
     # Note the sequence.
-    rgy1 = bbox[:,5]
-    rgx1 = bbox[:,6]
-    rgy2 = bbox[:,7]
-    rgx2 = bbox[:,8]
+    rgy1 = bboxes[:,5]
+    rgx1 = bboxes[:,6]
+    rgy2 = bboxes[:,7]
+    rgx2 = bboxes[:,8]
 
     ret = np.vstack([x1 + rgx1 * bbw,
                      y1 + rgy1 * bbh,
                      x2 + rgx2 * bbw,
                      y2 + rgy2 * bbh,
-                     score])
+                     scores])
     return ret.T
 
 def get_pnet_boxes(outputs, scale, threshold):
@@ -252,15 +252,15 @@ def get_onet_boxes(bboxes, outputs, threshold):
     return np.hstack([rects, scores, regs]), np.hstack([points_x, points_y])
 
 def get_inputs_from_bboxes(im, bboxes, size):
-    '''Get network inputs based on bounding boxes.
+    '''Get network inputs based on generated bounding boxes.
 
     Args:
       im: (image) rotated original image.
       bboxes: (tensor) regressed bounding boxes sized [N,5].
-      size: (int) target size.
+      size: (int) expected input size.
 
     Returns:
-      A tensor sized [N, 3, size, size]
+      A tensor sized [N, 3, size, size].
     '''
     num_boxes = bboxes.shape[0]
     inputs = np.zeros((num_boxes, size, size, 3), dtype=np.float32)
@@ -273,9 +273,8 @@ def get_inputs_from_bboxes(im, bboxes, size):
         im_crop = im[y1:y2+1, x1:x2+1, :]
         inputs[i] = cv2.resize(im_crop, (size,size))
 
-    # Swap [N,H,W,C] -> [N,C,H,W] to meet the Caffe needs.
-    inputs = np.swapaxes(inputs, 1, 3)
-    inputs = np.swapaxes(inputs, 2, 3)
+    # [N,H,W,C] -> [N,C,H,W] to meet the Caffe needs.
+    inputs = np.transpose(inputs, (0,3,1,2))
 
     # Zero mean and normalization.
     inputs = (inputs - 127.5) * 0.0078125
@@ -337,8 +336,7 @@ def main(image_path):
         print('Resize to:', im_resized.shape)
 
         # H,W,C -> C,H,W
-        im_resized = np.swapaxes(im_resized, 0, 2)
-        im_resized = np.swapaxes(im_resized, 1, 2)
+        im_resized = np.transpose(im_resized, (2,0,1))
 
         # Zero mean and normalization.
         im_resized = (im_resized - 127.5) * 0.0078125
