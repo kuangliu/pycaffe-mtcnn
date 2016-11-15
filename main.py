@@ -332,7 +332,7 @@ def main(image_path):
         hs = int(math.ceil(image_height*scale))
         ws = int(math.ceil(image_width*scale))
 
-        im_resized = cv2.resize(im, (ws,hs), 0, 0, cv2.INTER_AREA)
+        im_resized = cv2.resize(im, (ws,hs), interpolation=cv2.INTER_AREA)
         print('Resize to:', im_resized.shape)
 
         # H,W,C -> C,H,W
@@ -360,6 +360,8 @@ def main(image_path):
     bboxes = padding(bboxes, image_height, image_width)
 
     print('After PNet bboxes shape: ', bboxes.shape)
+    if bboxes.shape[0] == 0:
+        return
 
     # --------------------------------------------------------------
     # Second stage.
@@ -379,6 +381,8 @@ def main(image_path):
     bboxes = padding(bboxes, image_height, image_width)
 
     print('After RNet bboxes shape: ', bboxes.shape)
+    if bboxes.shape[0] == 0:
+        return
 
     # --------------------------------------------------------------
     # Third stage.
@@ -396,7 +400,10 @@ def main(image_path):
     bboxes, picked_indices = non_max_suppression(bboxes, 0.7, 'min')
     points = points[picked_indices]
     bboxes = padding(bboxes, image_height, image_width)
+
     print('After ONet bboxes shape: ', bboxes.shape, '\n')
+    if bboxes.shape[0] == 0:
+        return
 
     t2 = time.time()
     print('Total time: %.3fs\n' % (t2-t1))
